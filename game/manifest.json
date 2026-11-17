@@ -1,0 +1,17 @@
+{
+  "name": "股市求籤",
+  "short_name": "股市求籤",
+  "description": "用 39 支策略的真實回測幫股票抽籤，再用抽獎機看懂中獎率與回報率",
+  "lang": "zh-Hant-TW",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#5a0d0d",
+  "theme_color": "#5a0d0d",
+  "icons": [
+    { "src": "../icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "../icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "../icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

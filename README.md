@@ -4,6 +4,8 @@
 
 **線上版：** https://linwenyen-ux.github.io/quantlab/
 
+**股市求籤（遊戲頁）：** https://linwenyen-ux.github.io/quantlab/game/ — 把同一套回測結果換成「求籤」「抽獎機」「好籤榜」的說法，用虛擬資金看懂中獎率與回報率。
+
 ## 功能
 - 39 支策略（Alorse 30 支 ＋ 台股常用 8 支 ＋ Dual CCI）× 台股／美股，另可用條件積木自訂策略
 - 穩健性檢驗：隨機基準檢定、成本敏感度、交易序列模擬、Walk-Forward
