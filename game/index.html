@@ -3613,14 +3613,6 @@ function gRankHTML(rows, limit) {
     </table></div></details>` : ''}`;
 }
 
-/* 被排除的股票要講清楚是哪幾檔、為什麼，不要讓名單默默變短 */
-function gStaleNote(stale, newest) {
-  if (!stale.length) return '';
-  const show = stale.slice().sort((a, b) => a.asOf < b.asOf ? -1 : a.asOf > b.asOf ? 1 : 0).slice(0, 8)
-    .map(x => `${gEsc(x.n && x.n !== x.s ? x.n : x.s)}（${gEsc(x.s)}，資料到 ${gDate(x.asOf)}）`).join('、');
-  return `<div class="note">已排除 <b>${stale.length}</b> 檔資料過期的股票：最後一筆行情距 ${gDate(newest)} 超過 ${G_STALE_DAYS} 天，多半是已下市或長期停牌，拿舊行情跟還在交易的股票比不公平。${show}${stale.length > 8 ? `…等 ${stale.length} 檔` : ''}</div>`;
-}
-
 function gRenderScan() {
   const S = G.scan, prog = $g('#scanProg'), box = $g('#rankLive');
   if (!S) { prog.innerHTML = ''; box.innerHTML = ''; return; }
@@ -3631,11 +3623,10 @@ function gRenderScan() {
     ${S.dropped.length ? `<div class="note">清單超過 ${G_POOL_MAX} 檔，這次沒掃：${gEsc(S.dropped.join('、'))}</div>` : ''}
     ${S.halt ? `<div class="note">${S.halt}</div>` : ''}
     ${S.fails.length ? `<div class="note">沒有結果的代號：${S.fails.map(f => `${gEsc(f.s)}（${gEsc(f.why)}）`).join('、')}</div>` : ''}`;
-  const F = gSplitStale(S.rows), rows = gRankSort(F.fresh);
+  const rows = gRankSort(gSplitStale(S.rows).fresh);
   box.innerHTML = rows.length ? `<section class="card paper">
     <h2>${S.busy ? '目前排行' : '前 5 名'}　<small class="dim">${MARKETS[S.mk].label} · 近 ${S.yrs} 年 · 已掃 ${S.rows.length} 檔</small></h2>
-    ${gStaleNote(F.stale, F.newest)}
-    ${gRankHTML(rows)}</section>` : (F.stale.length ? `<section class="card paper"><h2>沒有可以排名的股票</h2>${gStaleNote(F.stale, F.newest)}</section>` : '');
+    ${gRankHTML(rows)}</section>` : '';
 }
 
 async function gScan() {
