@@ -75,7 +75,9 @@ input:focus, select:focus, button:focus-visible { outline: 3px solid var(--gold)
 /* ---------- 籤筒 ---------- */
 .altar { display: grid; grid-template-columns: 220px 1fr; gap: 16px; align-items: start; margin-bottom: 14px; }
 .altar .slip { margin-bottom: 0; }
-.tube-wrap { position: relative; height: 300px; display: flex; justify-content: center; align-items: flex-end; }
+/* 抽出的籤最高會到容器底部往上 304px（bottom 150 ＋ 高 120 ＋ rise 的 -34），
+   容器要比這個高，否則籤會溢出去蓋到上面的分頁列（手機版原本 250px 就是這樣）。overflow 再保險一層。 */
+.tube-wrap { position: relative; height: 310px; overflow: hidden; display: flex; justify-content: center; align-items: flex-end; }
 .tube { position: relative; z-index: 3; width: 120px; height: 170px; border-radius: 10px 10px 26px 26px; background: linear-gradient(90deg, #6d0f0f, #b02222 45%, #6d0f0f); border: 3px solid var(--gold); box-shadow: 0 10px 20px rgba(0, 0, 0, .4); display: flex; align-items: center; justify-content: center; }
 .tube::before { content: ""; position: absolute; left: -3px; right: -3px; top: 18px; height: 6px; background: var(--gold); }
 .tube span { width: 62px; height: 62px; border-radius: 50%; background: var(--gold); color: var(--red2); font: 700 36px/62px var(--serif); text-align: center; }
@@ -113,7 +115,9 @@ input:focus, select:focus, button:focus-visible { outline: 3px solid var(--gold)
 .grade.sm { font-size: 13px; padding: 0 6px; letter-spacing: 1px; border-width: 1px; white-space: nowrap; }
 .slip-name { font: 700 18px var(--serif); flex: 1 1 200px; min-width: 0; }
 .slip-name small { font: 400 12px var(--sans); color: var(--mut); margin-left: 6px; }
-.verse { font: 700 17px/1.9 var(--serif); text-align: center; background: var(--paper2); border-radius: 8px; padding: 10px; margin: 10px 0; color: var(--red2); letter-spacing: 3px; }
+/* 籤詩是七言對仗，窄螢幕若從句子中間斷行就毀了。每句各自一行、不換行，字級隨寬度縮放 */
+.verse { font: 700 clamp(13px, 4.1vw, 17px)/1.9 var(--serif); text-align: center; background: var(--paper2); border-radius: 8px; padding: 10px 4px; margin: 10px 0; color: var(--red2); letter-spacing: clamp(0px, 0.55vw, 3px); }
+.verse span { display: block; white-space: nowrap; }
 .plain p { margin: 4px 0; }
 .plain b { font-weight: 700; }
 .big-rtp { display: flex; flex-wrap: wrap; gap: 10px; margin: 10px 0; }
@@ -143,7 +147,22 @@ summary { cursor: pointer; color: var(--red); font-weight: 700; }
 .distbar .d4 { background: var(--up); } .distbar .d3 { background: #dd7a6f; } .distbar .d2 { background: #c9a45c; } .distbar .d1 { background: #6fae8c; } .distbar .d0 { background: var(--dn); }
 .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; color: var(--mut); }
 .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; }
-.tblwrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-top: 8px; }
+/* 橫向捲動的表格：左右兩側用陰影提示「這裡還有東西」，捲到底時陰影會自己消失（background-attachment 的 local/scroll 組合） */
+.tblwrap {
+  overflow-x: auto; -webkit-overflow-scrolling: touch; margin-top: 8px;
+  background:
+    linear-gradient(to right, var(--paper) 30%, rgba(255, 253, 245, 0)) left center,
+    linear-gradient(to left, var(--paper) 30%, rgba(255, 253, 245, 0)) right center,
+    radial-gradient(farthest-side at 0 50%, rgba(0, 0, 0, .16), rgba(0, 0, 0, 0)) left center,
+    radial-gradient(farthest-side at 100% 50%, rgba(0, 0, 0, .16), rgba(0, 0, 0, 0)) right center;
+  background-repeat: no-repeat;
+  background-size: 34px 100%, 34px 100%, 14px 100%, 14px 100%;
+  background-attachment: local, local, scroll, scroll;
+}
+.scrollhint { display: none; }
+/* 整筒籤：桌機展開、手機收合（open 由 gRenderList 依螢幕寬度決定） */
+.alllist > summary { cursor: pointer; font: 700 20px var(--serif); color: var(--red); padding: 2px 0; }
+.alllist > summary span { font: 400 13px var(--sans); color: var(--mut); }
 table { border-collapse: collapse; width: 100%; font-size: 13.5px; font-variant-numeric: tabular-nums; }
 th, td { padding: 7px 8px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
 th { color: var(--mut); font-weight: 700; font-size: 12.5px; background: var(--paper2); position: sticky; top: 0; }
@@ -156,9 +175,10 @@ tbody tr.blank { cursor: default; color: var(--mut); }
 
 /* ---------- 抽獎機 ---------- */
 .pickm label { display: block; font-weight: 700; margin-bottom: 6px; }
-.mgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+/* 左欄＝拉霸機＋千人試手氣，右欄＝規格＋戰績。左欄原本只有拉霸機，右欄長得多，桌機版左下會空一大塊 */
+.mgrid { display: grid; grid-template-columns: minmax(0, 440px) minmax(0, 1fr); gap: 14px; align-items: start; margin-bottom: 14px; }
+.mcol { display: grid; gap: 14px; align-content: start; min-width: 0; }
 .mgrid .card { margin-bottom: 0; }
-.mgrid .slot { grid-row: span 2; align-self: start; position: sticky; top: 12px; }
 .slot { background: linear-gradient(#a81f1f, #6d0f0f); border: 3px solid var(--gold); border-radius: 16px; padding: 16px; box-shadow: 0 8px 20px rgba(0, 0, 0, .35); }
 .slot-top { font: 700 16px var(--serif); color: var(--gold); text-align: center; margin-bottom: 10px; }
 .slot-win { background: #1c0505; border: 3px solid var(--gold2); border-radius: 12px; padding: 18px 10px; text-align: center; }
@@ -211,7 +231,14 @@ textarea:focus { outline: 3px solid var(--gold); outline-offset: 1px; }
 /* ---------- 手機 ---------- */
 @media (max-width: 720px) {
   .altar { grid-template-columns: 1fr; }
-  .tube-wrap { height: 250px; }
+  .scrollhint { display: block; }
+  /* 單欄時讓左右欄的卡片直接攤平成一串，再把「千人試手氣」排到最後，順序維持 拉霸機→規格→戰績→千人 */
+  .mcol { display: contents; }
+  #crowdBox { order: 9; }
+  /* 三顆籌碼平分一列，不要折行 */
+  .bets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .bets .betlbl { grid-column: 1 / -1; text-align: center; }
+  .chip { padding: 0 4px; font-size: 14px; }
   .mgrid { grid-template-columns: 1fr; }
   .mgrid .slot { grid-row: auto; position: static; }
   .kpis { grid-template-columns: repeat(2, 1fr); }
@@ -328,24 +355,28 @@ textarea:focus { outline: 3px solid var(--gold); outline-offset: 1px; }
         <p class="dim" id="mNote"></p>
       </section>
       <div class="mgrid">
-        <section class="slot">
-          <div class="slot-top" id="mName"></div>
-          <div class="slot-win" id="slotWin">
-            <div class="slot-num" id="slotNum">—</div>
-            <div class="slot-msg" id="slotMsg">按「拉一次」開始</div>
-          </div>
-          <div class="slot-src" id="slotSrc">每拉一次，就從這支策略的歷史交易裡隨機抽一筆當結果。</div>
-          <div class="bets" id="bets"></div>
-          <div class="slot-btns">
-            <button class="btn big" id="btnPull">拉一次</button>
-            <button class="btn" id="btnPull10">連抽 10 次</button>
-            <button class="btn ghost" id="btnReset">重來</button>
-          </div>
-        </section>
-        <section class="card paper" id="specBox"></section>
-        <section class="card paper" id="playBox"></section>
+        <div class="mcol">
+          <section class="slot">
+            <div class="slot-top" id="mName"></div>
+            <div class="slot-win" id="slotWin">
+              <div class="slot-num" id="slotNum">—</div>
+              <div class="slot-msg" id="slotMsg">按「拉一次」開始</div>
+            </div>
+            <div class="slot-src" id="slotSrc">每拉一次，就從這支策略的歷史交易裡隨機抽一筆當結果。</div>
+            <div class="bets" id="bets"></div>
+            <div class="slot-btns">
+              <button class="btn big" id="btnPull">拉一次</button>
+              <button class="btn" id="btnPull10">連抽 10 次</button>
+              <button class="btn ghost" id="btnReset">重來</button>
+            </div>
+          </section>
+          <section class="card paper" id="crowdBox"></section>
+        </div>
+        <div class="mcol">
+          <section class="card paper" id="specBox"></section>
+          <section class="card paper" id="playBox"></section>
+        </div>
       </div>
-      <section class="card paper" id="crowdBox"></section>
     </div>
   </main>
 
@@ -3320,7 +3351,7 @@ function gSlipHTML(x) {
       <span class="grade g${g.lv}">${g.name}</span>
       <span class="slip-name">${gEsc(r.name)}<small>${gEsc(r.cat)}</small></span>
     </div>
-    <div class="verse">${g.verse.slice(0, 2).join('，')}；<br>${g.verse.slice(2).join('，')}。</div>
+    <div class="verse"><span>${g.verse.slice(0, 2).join('，')}；</span><span>${g.verse.slice(2).join('，')}。</span></div>
     <div class="plain">
       <p>這支策略在 <b>${gEsc(G.name)}（${gEsc(G.sym)}）</b>過去 ${G.ctx.n} 個交易日出手 <b>${sp.n}</b> 次，中 <b>${sp.wins}</b> 次${r.nOpen ? '；另有 1 筆目前還抱著、尚未結算（不算進中獎率與回報率，但算進整段期間的輸贏）' : ''}。</p>
     </div>
@@ -3368,9 +3399,11 @@ function gRenderList() {
   const o = G.ov, el = $g('#listBox');
   const rows = o.rows.slice().sort((a, b) => ((b.g ? b.g.lv : -1) - (a.g ? a.g.lv : -1)) || ((b.g ? b.r.tot : -9) - (a.g ? a.r.tot : -9)) || (a.no - b.no));
   el.hidden = false;
+  const narrow = !!(window.matchMedia && window.matchMedia('(max-width: 720px)').matches);
   el.innerHTML = `
-    <h2>整筒籤（${STRATS.length} 支）</h2>
-    <p class="dim">點任何一列可以直接看那支籤。</p>
+    <details class="alllist"${narrow ? '' : ' open'}>
+    <summary>整筒籤（${STRATS.length} 支）<span>　點任何一列可以直接看那支籤</span></summary>
+    <p class="dim scrollhint">表格可以左右滑動，右邊還有「出手」和「今天」兩欄。</p>
     <div class="tblwrap"><table>
       <thead><tr><th>籤號</th><th>策略</th><th>籤等</th><th>中獎率</th><th>回報率／100 元</th><th>整段期間</th><th>出手</th><th>今天</th></tr></thead>
       <tbody>${rows.map(x => x.g ? `
@@ -3379,7 +3412,7 @@ function gRenderList() {
           <td>${x.spec.n}</td><td>${x.r.signalNow ? gEsc(x.r.signalNow.action) : '—'}</td></tr>` : `
         <tr class="blank"><td>${x.no}</td><td>${gEsc(x.r.name)}</td><td>無字籤</td>
           <td colspan="5" style="text-align:left">${x.r.short ? `資料不足（需要 ${x.r.short} 個交易日）` : (x.r.nOpen ? '只有一筆還沒賣出的交易，尚無結果' : '這段期間沒有出手')}</td></tr>`).join('')}
-      </tbody></table></div>`;
+      </tbody></table></div></details>`;
 }
 
 /* ---------- 真假鑑定（背景執行實驗室的隨機基準檢定） ---------- */
@@ -3436,7 +3469,7 @@ function gSetMachine(no) {
 
 function gRenderBets() {
   const M = G.m;
-  $g('#bets').innerHTML = '每注　' + G_BETS[MK.key].chips.map(c => `<button type="button" class="chip${c === M.bet ? ' on' : ''}" data-bet="${c}">${gMoney(c)}</button>`).join('');
+  $g('#bets').innerHTML = '<span class="betlbl">每注</span>' + G_BETS[MK.key].chips.map(c => `<button type="button" class="chip${c === M.bet ? ' on' : ''}" data-bet="${c}">${gMoney(c)}</button>`).join('');
 }
 
 function gSetBtns() {
