@@ -118,6 +118,16 @@ input:focus, select:focus, button:focus-visible { outline: 3px solid var(--gold)
 /* 籤詩是七言對仗，窄螢幕若從句子中間斷行就毀了。每句各自一行、不換行，字級隨寬度縮放 */
 .verse { font: 700 clamp(13px, 4.1vw, 17px)/1.9 var(--serif); text-align: center; background: var(--paper2); border-radius: 8px; padding: 10px 4px; margin: 10px 0; color: var(--red2); letter-spacing: clamp(0px, 0.55vw, 3px); }
 .verse span { display: block; white-space: nowrap; }
+/* 擲筊 */
+.poe { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; background: var(--paper2); border: 1px solid var(--line); border-radius: 8px; padding: 10px; margin: 10px 0; }
+.poe-pair { display: flex; gap: 10px; }
+.poe-pair i { width: 46px; height: 32px; border-radius: 46px 46px 10px 10px; background: linear-gradient(#b02222, #6d0f0f); border: 2px solid var(--gold2); color: var(--gold); font: 700 15px/30px var(--serif); font-style: normal; text-align: center; }
+.poe-pair i.f1 { background: linear-gradient(#8f1616, #3d0808); border-radius: 46px 46px 46px 46px / 40px 40px 22px 22px; }
+.poe-pair.rolling i { animation: poeroll .3s linear infinite; }
+@keyframes poeroll { 0% { rotate: -16deg; } 50% { rotate: 16deg; } 100% { rotate: -16deg; } }
+.poe-txt { flex: 1 1 260px; min-width: 0; }
+.poe-name { font: 700 20px var(--serif); letter-spacing: 2px; }
+.poe-name.ok { color: var(--dn); } .poe-name.warn { color: #8a6410; } .poe-name.bad { color: var(--up); } .poe-name.na { color: var(--mut); }
 .plain p { margin: 4px 0; }
 .plain b { font-weight: 700; }
 .big-rtp { display: flex; flex-wrap: wrap; gap: 10px; margin: 10px 0; }
@@ -3073,6 +3083,25 @@ function gVerdict(mc) {
   return { t: '跟亂買差不多', c: 'bad', d: '同樣次數、隨便挑日子買，也很容易做到一樣的成績' };
 }
 
+/* 擲筊：聖杯／笑杯／陰杯直接對應「真假鑑定」的結果，不是另外隨機擲一次。
+   這頁所有數字都是真回測，筊只是把統計檢定換成廟裡的說法；若讓它隨機，就等於用擲筊蓋掉真正的結論。
+   面：凸 = 圓面朝上（陰），平 = 平面朝上（陽）。一陰一陽為聖杯、兩平為笑杯、兩凸為陰杯。 */
+const G_POE = {
+  ok: { name: '聖杯', faces: ['凸', '平'], t: '神明允了', d: '贏過絕大多數「同樣次數、隨便挑日子買」的結果，撐得住檢驗' },
+  warn: { name: '笑杯', faces: ['平', '平'], t: '神明笑而不答', d: '看起來不錯，但還分不出是本事還是運氣' },
+  bad: { name: '陰杯', faces: ['凸', '凸'], t: '神明不允', d: '同樣次數、隨便挑日子買，也很容易做到一樣的成績' },
+  na: { name: '無筊', faces: ['—', '—'], t: '擲不出來', d: '出手太少，沒辦法和「隨便挑日子買」比較' }
+};
+function gPoe(v) { return G_POE[(v && v.c) in G_POE ? v.c : 'na']; }
+
+/* 今日定籤：同一天、同一檔股票一定抽到同一支籤，隔天才會變。用 FNV-1a 把「日期＋代號」轉成固定的序號。 */
+function gHashSeed(s) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+function gDailyPick(dateStr, sym, n) { return n > 0 ? gHashSeed(dateStr + '|' + sym) % n : -1; }
+
 /* 可重現亂數（測試用） */
 function gRng(a) {
   return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
@@ -3366,12 +3395,121 @@ function gSlipHTML(x) {
     ${g.cap ? `<div class="note">${gEsc(g.cap)}。</div>` : ''}
     ${gTodayHTML(r)}
     <p><b>真假鑑定：</b><span id="slipVerdict">${gVerdictHTML(r.id)}</span></p>
+    <div class="poe" id="poeBox"><button class="btn" type="button" data-act="poe">🥠 擲筊問神</button>
+      <span class="dim">擲筊的結果就是上面的鑑定結論，不是另外抽的。</span></div>
     <details><summary>這支籤的規則</summary>
       <p><b>進場：</b>${gEsc(st.entry || '—')}</p><p><b>出場：</b>${gEsc(st.exit || '—')}</p></details>
     <div class="acts">
       <button class="btn big" type="button" data-act="machine">🎰 拿這支籤去抽獎機</button>
       <button class="btn" type="button" data-act="redraw">🎋 再求一支</button>
+      <button class="btn" type="button" data-act="daily">📅 今日定籤</button>
+      <button class="btn ghost" type="button" data-act="share">🖼️ 存成籤詩卡</button>
     </div>`;
+}
+
+/* ---------- 擲筊、今日定籤、籤詩卡 ---------- */
+
+/* 擲筊：結果直接取自「真假鑑定」，動畫只是揭曉，不會擲出別的答案 */
+async function gThrowPoe() {
+  const box = $g('#poeBox'); if (!box || !G.cur) return;
+  if (G.mcState === 'wait') { box.innerHTML = '<span class="dim"><span class="spin"></span>鑑定還沒跑完，等一下再擲。</span>'; return; }
+  const v = gVerdict(G.mc && G.mc[G.ov.rows[G.cur - 1].r.id]), p = gPoe(v);
+  const quick = gNoMotion();
+  box.innerHTML = `<div class="poe-pair${quick ? '' : ' rolling'}"><i>?</i><i>?</i></div><div class="poe-txt dim">擲筊中…</div>`;
+  if (!quick) await gWait(900);
+  if (!$g('#poeBox')) return;
+  $g('#poeBox').innerHTML = `
+    <div class="poe-pair"><i class="f${p.faces[0] === '凸' ? 1 : 0}">${p.faces[0]}</i><i class="f${p.faces[1] === '凸' ? 1 : 0}">${p.faces[1]}</i></div>
+    <div class="poe-txt"><b class="poe-name ${v.c}">${p.name}</b>　${gEsc(p.t)}<span class="dim">　${gEsc(p.d)}</span></div>
+    <button class="btn ghost" type="button" data-act="poe">再擲一次</button>
+    <span class="dim">結果取自上面的「真假鑑定」，重擲不會改變。</span>`;
+}
+
+/* 今日定籤：同一天、同一檔固定同一支籤 */
+function gDailyDraw() {
+  if (!G.ov || !G.ov.played.length) return;
+  const today = new Date(), p = n => String(n).padStart(2, '0');
+  const ds = `${today.getFullYear()}${p(today.getMonth() + 1)}${p(today.getDate())}`;
+  const i = gDailyPick(ds, MK.key + ':' + G.sym, G.ov.played.length);
+  const x = G.ov.played[i];
+  gShowSlip(x.no, true);
+  gStatus(`今日定籤（${ds.slice(0, 4)}-${ds.slice(4, 6)}-${ds.slice(6)}）：${gEsc(G.sym)} 今天固定抽到第 ${x.no} 籤，明天才會換。`);
+}
+
+/* 籤詩卡：把這支籤畫成一張圖存下來。字型用頁面上同一組，畫完直接下載 PNG。 */
+function gShareCard(btn) {
+  const x = G.ov && G.cur && G.ov.rows[G.cur - 1];
+  if (!x || !x.g) return;
+  const W = 1080, H = 1260;
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const d = c.getContext('2d');
+  const SERIF = '"Noto Serif TC","Songti TC","PMingLiU",serif';
+  const SANS = '"Microsoft JhengHei","PingFang TC","Noto Sans TC",system-ui,sans-serif';
+  const GOLD = '#e8b84a', PAPER = '#fbf3df', INK = '#3b1d0e', MUT = '#7a5b3f';
+  const UP = '#c0271d', DN = '#1b7a4b';
+  const mid = (t, f, col, y, max) => { d.font = f; d.fillStyle = col; d.textAlign = 'center'; d.fillText(t, W / 2, y, max); };
+
+  const bg = d.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, '#8f1616'); bg.addColorStop(.55, '#5a0d0d'); bg.addColorStop(1, '#3d0808');
+  d.fillStyle = bg; d.fillRect(0, 0, W, H);
+  d.strokeStyle = GOLD; d.lineWidth = 6; d.strokeRect(26, 26, W - 52, H - 52);
+
+  mid('股市求籤', `700 46px ${SERIF}`, GOLD, 110);
+  mid(`${x.r.name}`, `700 40px ${SANS}`, PAPER, 180, W - 160);
+  mid(`${G.name}（${G.sym}）`, `400 30px ${SANS}`, '#f0d9a8', 228, W - 160);
+
+  // 籤紙
+  const cardY = 272, cardH = 760;
+  d.fillStyle = PAPER; d.fillRect(70, cardY, W - 140, cardH);
+  d.strokeStyle = '#b98a1e'; d.lineWidth = 3; d.strokeRect(70, cardY, W - 140, cardH);
+
+  const g = x.g, sp = x.spec, r = x.r;
+  mid(`第 ${x.no} 籤`, `700 28px ${SERIF}`, MUT, cardY + 62);
+  const gc = ['#c0271d', '#c0271d', '#8a6410', '#1b7a4b', '#1b7a4b'][g.lv];
+  mid(g.name, `700 86px ${SERIF}`, gc, cardY + 162);
+  mid(g.verse.slice(0, 2).join('，') + '；', `700 40px ${SERIF}`, '#5a0d0d', cardY + 252, W - 220);
+  mid(g.verse.slice(2).join('，') + '。', `700 40px ${SERIF}`, '#5a0d0d', cardY + 312, W - 220);
+
+  // 四格數字
+  const cells = [
+    ['中獎率', anPu(sp.winRate, 0), `${sp.n} 次中 ${sp.wins} 次`, INK],
+    ['回報率（每投 100 元）', gRtp(sp.rtp), `平均每次 ${anPc(sp.mean)}`, sp.mean >= 0 ? UP : DN],
+    ['整段期間', anPc(r.tot), `抱著不動 ${anPc(G.R.bh.tot)}`, r.tot >= 0 ? UP : DN],
+    ['中途最慘', anPc(r.mdd), `抱著不動 ${anPc(G.R.bh.mdd)}`, DN]
+  ];
+  const bx = 110, by = cardY + 372, bw = (W - 220) / 2, bh = 128;
+  cells.forEach((cl, i) => {
+    const px = bx + (i % 2) * bw, py = by + Math.floor(i / 2) * bh;
+    d.strokeStyle = '#dcc79a'; d.lineWidth = 2; d.strokeRect(px, py, bw - 10, bh - 10);
+    d.textAlign = 'left'; d.font = `400 22px ${SANS}`; d.fillStyle = MUT; d.fillText(cl[0], px + 16, py + 36, bw - 42);
+    d.font = `700 42px ${SANS}`; d.fillStyle = cl[3]; d.fillText(cl[1], px + 16, py + 84);
+    d.font = `400 20px ${SANS}`; d.fillStyle = MUT; d.fillText(cl[2], px + 16, py + 110, bw - 42);
+  });
+
+  // 今日指示 ＋ 真假鑑定
+  const sn = r.signalNow, asOf = gDate(G.ctx.dates[G.ctx.n - 1]);
+  const sig = sn ? (sn.action === '持有中' ? `持有中（已抱 ${sn.bars} 天，帳面 ${anPc(sn.unreal)}）` : sn.action) : '—';
+  const v = gVerdict(G.mc && G.mc[r.id]);
+  d.textAlign = 'center';
+  d.font = `700 30px ${SANS}`; d.fillStyle = INK;
+  d.fillText(`回測訊號（資料到 ${asOf}）：${sig}`, W / 2, by + 2 * bh + 42, W - 200);
+  d.font = `400 26px ${SANS}`; d.fillStyle = MUT;
+  d.fillText(`真假鑑定：${v.t}　·　擲筊：${gPoe(v).name}`, W / 2, by + 2 * bh + 86, W - 200);
+
+  // 頁尾免責
+  mid(`${G.ctx.n} 個交易日回測　·　${STRATS.length} 支策略中的第 ${x.no} 支`, `400 24px ${SANS}`, '#f0d9a8', cardY + cardH + 58);
+  mid('娛樂與教學用途，使用虛擬資金，不構成投資建議。', `700 26px ${SANS}`, GOLD, cardY + cardH + 104);
+  mid('所有數字來自歷史回測，不代表未來結果。行情資料來自 FinMind。', `400 22px ${SANS}`, '#f0d9a8', cardY + cardH + 142);
+  mid('linwenyen-ux.github.io/quantlab/game/', `400 22px ${SANS}`, '#d9b26a', cardY + cardH + 182);
+
+  c.toBlob(b => {
+    if (!b) { gStatus('這個瀏覽器存不出圖片。'); return; }
+    const u = URL.createObjectURL(b), a = document.createElement('a');
+    a.href = u; a.download = `股市求籤_${G.sym}_第${x.no}籤.png`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(u), 4000);
+    if (btn) { const t = btn.textContent; btn.textContent = '✅ 已存檔'; setTimeout(() => { btn.textContent = t; }, 2000); }
+  }, 'image/png');
 }
 
 /* ---------- 今日總運勢、整筒籤 ---------- */
@@ -3745,8 +3883,12 @@ function gInit() {
 
   $g('#slip').addEventListener('click', e => {
     const b = e.target.closest('[data-act]'); if (!b || !G.ov) return;
-    if (b.dataset.act === 'redraw') gDraw(false);
-    else if (b.dataset.act === 'machine' && G.cur) { gSetMachine(G.cur); gShowTab('machine'); window.scrollTo({ top: 0 }); }
+    const a = b.dataset.act;
+    if (a === 'redraw') gDraw(false);
+    else if (a === 'machine' && G.cur) { gSetMachine(G.cur); gShowTab('machine'); window.scrollTo({ top: 0 }); }
+    else if (a === 'poe') gThrowPoe();
+    else if (a === 'daily') gDailyDraw();
+    else if (a === 'share') gShareCard(b);
   });
   $g('#listBox').addEventListener('click', e => {
     const tr = e.target.closest('tr[data-no]'); if (tr) gShowSlip(+tr.dataset.no, true);
