@@ -373,6 +373,7 @@ textarea:focus { outline: 3px solid var(--gold); outline-offset: 1px; }
         <li><b>同數時：</b>比「平均回報率」（有出手的策略，每投 100 元平均拿回幾元的平均值）。</li>
       </ol>
       <p>好籤多，代表這檔股票在這段期間讓比較多種策略都有效，比較不是靠單一策略碰運氣。它不代表股票本身會漲，也不代表未來同樣有效。</p>
+      <p><b>資料過期的不排名：</b>最後一筆行情比這批資料的最新一天落後超過 10 天的股票（多半是已下市或長期停牌），不列入排行，並在上方列出是哪幾檔。冷門股偶爾幾天沒成交不會被排除。</p>
       <p class="dim">籤等規則見「🎋 求籤」頁下方。期間用上方的「看多久」。</p>
     </section>
   </main>
@@ -3065,6 +3066,25 @@ function gRankSort(rows) {
   const v = x => isNA(x.rtp) ? -1e9 : x.rtp;
   return rows.slice().sort((a, b) => (b.good - a.good) || (v(b) - v(a)) || (a.s < b.s ? -1 : a.s > b.s ? 1 : 0));
 }
+/* 資料過期的股票不列入排名（已下市、長期停牌的，拿一段舊行情跟還在交易的股票比不公平）。
+   基準用「這批資料裡最新的一天」而不是今天：排行可能是前幾天在電腦上算好的，用今天比會整批誤判。
+   門檻 10 天是為了不誤殺冷門股——冷門股連續幾天沒成交時 FinMind 的收盤價是 0、那幾天不會有 K 棒，
+   最後一筆就會落後市場一兩天（例：3593 力銘 2026-11-16、11-17 都沒有收盤價）。 */
+const G_STALE_DAYS = 10;
+function gDaysBetween(a, b) {                       // 'YYYYMMDD' → b 比 a 晚幾天
+  const t = s => Date.UTC(+String(s).slice(0, 4), +String(s).slice(4, 6) - 1, +String(s).slice(6, 8));
+  return Math.round((t(b) - t(a)) / 86400000);
+}
+function gSplitStale(rows, days) {
+  days = days == null ? G_STALE_DAYS : days;
+  const dated = rows.filter(x => x && x.asOf);
+  if (!dated.length) return { fresh: rows.slice(), stale: [], newest: null };
+  const newest = dated.reduce((m, x) => x.asOf > m ? x.asOf : m, dated[0].asOf);
+  const fresh = [], stale = [];
+  for (const x of rows) (x && x.asOf && gDaysBetween(x.asOf, newest) > days ? stale : fresh).push(x);
+  return { fresh, stale, newest };
+}
+
 /* 代號清單：逗號、全形逗號、空白、換行都可分隔；去重、超過上限的另外回報 */
 function gParseSyms(raw, max, upper) {
   const all = String(raw || '').split(/[,，、;\s]+/).filter(Boolean).map(x => upper ? x.toUpperCase() : x);
@@ -3593,6 +3613,14 @@ function gRankHTML(rows, limit) {
     </table></div></details>` : ''}`;
 }
 
+/* 被排除的股票要講清楚是哪幾檔、為什麼，不要讓名單默默變短 */
+function gStaleNote(stale, newest) {
+  if (!stale.length) return '';
+  const show = stale.slice().sort((a, b) => a.asOf < b.asOf ? -1 : a.asOf > b.asOf ? 1 : 0).slice(0, 8)
+    .map(x => `${gEsc(x.n && x.n !== x.s ? x.n : x.s)}（${gEsc(x.s)}，資料到 ${gDate(x.asOf)}）`).join('、');
+  return `<div class="note">已排除 <b>${stale.length}</b> 檔資料過期的股票：最後一筆行情距 ${gDate(newest)} 超過 ${G_STALE_DAYS} 天，多半是已下市或長期停牌，拿舊行情跟還在交易的股票比不公平。${show}${stale.length > 8 ? `…等 ${stale.length} 檔` : ''}</div>`;
+}
+
 function gRenderScan() {
   const S = G.scan, prog = $g('#scanProg'), box = $g('#rankLive');
   if (!S) { prog.innerHTML = ''; box.innerHTML = ''; return; }
@@ -3603,10 +3631,11 @@ function gRenderScan() {
     ${S.dropped.length ? `<div class="note">清單超過 ${G_POOL_MAX} 檔，這次沒掃：${gEsc(S.dropped.join('、'))}</div>` : ''}
     ${S.halt ? `<div class="note">${S.halt}</div>` : ''}
     ${S.fails.length ? `<div class="note">沒有結果的代號：${S.fails.map(f => `${gEsc(f.s)}（${gEsc(f.why)}）`).join('、')}</div>` : ''}`;
-  const rows = gRankSort(S.rows);
+  const F = gSplitStale(S.rows), rows = gRankSort(F.fresh);
   box.innerHTML = rows.length ? `<section class="card paper">
-    <h2>${S.busy ? '目前排行' : '前 5 名'}　<small class="dim">${MARKETS[S.mk].label} · 近 ${S.yrs} 年 · 已掃 ${rows.length} 檔</small></h2>
-    ${gRankHTML(rows)}</section>` : '';
+    <h2>${S.busy ? '目前排行' : '前 5 名'}　<small class="dim">${MARKETS[S.mk].label} · 近 ${S.yrs} 年 · 已掃 ${S.rows.length} 檔</small></h2>
+    ${gStaleNote(F.stale, F.newest)}
+    ${gRankHTML(rows)}</section>` : (F.stale.length ? `<section class="card paper"><h2>沒有可以排名的股票</h2>${gStaleNote(F.stale, F.newest)}</section>` : '');
 }
 
 async function gScan() {
@@ -3662,10 +3691,11 @@ function gRenderAll() {
       : `<p>還沒有${MK.label}的全池排行。</p><p class="dim">整個股票池太大，網頁沒辦法即時掃完，要在電腦上執行 <b>tools\\scan_pool.bat</b> 預先算好（做法見 README）。</p>`}`;
     return;
   }
-  const rows = gRankSort(D.rows);
+  const F = gSplitStale(D.rows), rows = gRankSort(F.fresh);
   el.innerHTML = `
     <h2>好籤榜｜整個股票池　<small class="dim">${MK.label} · 近 ${D.years} 年</small></h2>
-    <p>從 <b>${D.pool}</b> 檔股票池裡成功掃了 <b>${rows.length}</b> 檔${D.failed ? `（${D.failed} 檔沒有結果）` : ''}，於 <b>${gEsc(D.generatedAt)}</b> 算好${D.partial ? '；<b>這一份還沒掃完整個池</b>' : ''}。這是預先算好的結果，不是即時的。</p>
+    <p>從 <b>${D.pool}</b> 檔股票池裡成功掃了 <b>${D.rows.length}</b> 檔${D.failed ? `（${D.failed} 檔沒有結果）` : ''}，於 <b>${gEsc(D.generatedAt)}</b> 算好${D.partial ? '；<b>這一份還沒掃完整個池</b>' : ''}。這是預先算好的結果，不是即時的。${F.stale.length ? `實際列入排名 <b>${rows.length}</b> 檔。` : ''}</p>
+    ${gStaleNote(F.stale, F.newest)}
     ${gRankHTML(rows, 50)}`;
   el.dataset.years = D.years;
 }
