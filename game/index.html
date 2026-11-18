@@ -68,7 +68,7 @@ input:focus, select:focus, button:focus-visible { outline: 3px solid var(--gold)
 .spin { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(232, 184, 74, .35); border-top-color: var(--gold); border-radius: 50%; animation: rot .8s linear infinite; vertical-align: -2px; margin-right: 6px; }
 @keyframes rot { to { transform: rotate(360deg); } }
 
-.tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
+.tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
 .tab { font: 700 17px var(--serif); height: 48px; border-radius: 10px 10px 0 0; border: 1px solid rgba(232, 184, 74, .45); border-bottom: 3px solid transparent; background: rgba(0, 0, 0, .25); color: #f0d9a8; cursor: pointer; }
 .tab.on { background: var(--paper); color: var(--red); border-bottom-color: var(--gold); }
 
@@ -125,6 +125,20 @@ table.cmp td { text-align: center; }
 table.cmp td.win { background: #fdf0cc; font-weight: 700; box-shadow: inset 0 0 0 1px var(--gold2); }
 .lnk { font: inherit; font-weight: 700; background: none; border: 0; padding: 0; color: var(--red); cursor: pointer; text-decoration: underline; }
 .lnk small { display: block; font-weight: 400; font-size: 11px; color: var(--mut); text-decoration: none; }
+
+/* 收集簿：五種籤等排成一排集點格，還沒收到的留空位 */
+.bookgrid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin: 10px 0; }
+.bookcell { background: var(--paper2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 4px; text-align: center; min-width: 0; }
+.bookcell b { display: block; font: 700 22px var(--sans); font-variant-numeric: tabular-nums; margin-top: 4px; }
+.bookcell small { display: block; font-size: 11px; color: var(--mut); }
+.bookcell.off { border-style: dashed; opacity: .55; }
+.bookcell .grade.sm { display: inline-block; }
+#pBook tbody tr { cursor: pointer; }
+/* 收集簿表格：重要的欄排前面（手機不用捲就看得到），籤等與策略是文字要靠左 */
+#pBook th:nth-child(4), #pBook td:nth-child(4),
+#pBook th:nth-child(5), #pBook td:nth-child(5),
+#pBook th:nth-child(6), #pBook td:nth-child(6) { text-align: left; }
+.urlbox { width: 100%; max-width: 420px; font: 400 12px var(--sans); padding: 2px 6px; }
 
 /* 搜尋結果 */
 #rankFind { width: auto; flex: 1 1 220px; min-width: 180px; height: 38px; }
@@ -286,7 +300,14 @@ textarea:focus { outline: 3px solid var(--gold); outline-offset: 1px; }
   .kpis { grid-template-columns: repeat(2, 1fr); }
   .brand h1 { font-size: 22px; }
   .brand p { display: none; }
-  .tab { font-size: 15px; }
+  /* 四個分頁要在 360px 寬的手機上排成一列，字不能折行 */
+  .tabs { gap: 5px; }
+  .tab { font-size: 14px; letter-spacing: 0; padding: 0 2px; white-space: nowrap; }
+  /* 五格集點卡維持一排，字縮小就好（折成 3+2 反而看不出是一套） */
+  .bookgrid { gap: 5px; }
+  .bookcell { padding: 7px 2px; }
+  .bookcell .grade.sm { font-size: 11px; letter-spacing: 0; padding: 0 3px; }
+  .bookcell b { font-size: 19px; }
   .rk { grid-template-columns: 44px 1fr; }
   .rk .btn { grid-column: 1 / -1; }
   .ctrl .btn.big { flex: 1 1 100%; }
@@ -345,6 +366,7 @@ textarea:focus { outline: 3px solid var(--gold); outline-offset: 1px; }
     <button type="button" class="tab on" data-t="fortune">🎋 求籤</button>
     <button type="button" class="tab" data-t="machine">🎰 抽獎機</button>
     <button type="button" class="tab" data-t="rank">🏆 好籤榜</button>
+    <button type="button" class="tab" data-t="book">📖 收集簿</button>
   </nav>
 
   <!-- ================= 求籤 ================= -->
@@ -449,6 +471,21 @@ textarea:focus { outline: 3px solid var(--gold); outline-offset: 1px; }
       <p>好籤多，代表這檔股票在這段期間讓比較多種策略都有效，比較不是靠單一策略碰運氣。它不代表股票本身會漲，也不代表未來同樣有效。</p>
       <p><b>資料過期的不排名：</b>最後一筆行情比這批資料的最新一天落後超過 10 天的股票（多半是已下市或長期停牌），不列入排行。冷門股偶爾幾天沒成交不會被排除。</p>
       <p class="dim">籤等規則見「🎋 求籤」頁下方。期間用上方的「看多久」。</p>
+    </section>
+  </main>
+
+  <!-- ================= 收集簿 ================= -->
+  <main id="pBook" hidden>
+    <section class="card paper" id="bookBox"></section>
+    <section class="card paper">
+      <h2>收集簿怎麼記</h2>
+      <ol class="rules">
+        <li>每看一支籤（求籤、今日定籤、從整筒籤點開都算），就收進收集簿一次。</li>
+        <li>同一檔股票的同一支籤只佔一格，再抽到只更新時間和次數。</li>
+        <li>最多留 300 支，滿了會擠掉最舊的。</li>
+      </ol>
+      <p><b>紀錄只存在這台裝置的瀏覽器裡</b>，不會上傳到任何地方；換裝置、換瀏覽器、用無痕模式或清掉瀏覽資料，紀錄就不見了。</p>
+      <p class="dim">籤等會隨著資料更新而改變（多了新行情、換了期間都可能不同），收集簿記的是你當時看到的那一次。</p>
     </section>
   </main>
 
@@ -3245,6 +3282,74 @@ function gSplitStale(rows, days) {
   return { fresh, stale, newest };
 }
 
+/* ---------- 連結帶參數 ---------- */
+/* 網址可以直接指定市場、代號、期間與籤號：?mk=TW&sym=2330&y=2&no=7&tab=fortune
+   只收白名單內的值——這些字串是從別人傳來的連結讀進來的，不驗就等於讓外面的東西直接進畫面。 */
+const G_PARAM_YEARS = [1, 2, 3, 5];
+const G_TABS = ['fortune', 'machine', 'rank', 'book'];
+function gParseParams(search, mkKeys) {
+  const out = {};
+  const q = String(search || '').replace(/^[?#]+/, '');
+  if (!q) return out;
+  const dec = s => { try { return decodeURIComponent(String(s).replace(/\+/g, ' ')); } catch (e) { return ''; } };
+  const p = {};
+  q.split('&').forEach(kv => {
+    if (!kv) return;
+    const i = kv.indexOf('=');
+    const k = dec(i < 0 ? kv : kv.slice(0, i));
+    if (k && !(k in p)) p[k] = (i < 0 ? '' : dec(kv.slice(i + 1))).trim();   // 同名參數以第一個為準
+  });
+  const mk = String(p.mk || '').toUpperCase();
+  if ((mkKeys || ['TW', 'US']).indexOf(mk) >= 0) out.mk = mk;
+  const sym = String(p.sym || '');
+  if (/^[A-Za-z0-9][A-Za-z0-9.-]{0,11}$/.test(sym)) out.sym = out.mk === 'US' ? sym.toUpperCase() : sym;
+  const y = +p.y;
+  if (G_PARAM_YEARS.indexOf(y) >= 0) out.y = y;
+  const no = +p.no;
+  if (no === Math.floor(no) && no >= 1 && no <= 999) out.no = no;
+  if (G_TABS.indexOf(p.tab) >= 0) out.tab = p.tab;
+  return out;
+}
+function gBuildQuery(o) {
+  const out = [];
+  ['mk', 'sym', 'y', 'no', 'tab'].forEach(k => {
+    const v = o ? o[k] : null;
+    if (v !== undefined && v !== null && v !== '') out.push(k + '=' + encodeURIComponent(v));
+  });
+  return out.join('&');
+}
+
+/* ---------- 籤等收集簿 ---------- */
+/* 抽到過的籤記在這台裝置上。同一檔股票的同一支籤只佔一格，再抽到只更新時間與次數——
+   收集簿要回答的是「我蒐到幾支不同的籤」，同一支重抽十次不該灌水成十格。 */
+const G_BOOK_MAX = 300;
+const G_BOOK_V = 1;
+function gBookKey(mk, sym, no) { return mk + '|' + sym + '|' + no; }
+function gBookAdd(items, it) {
+  const list = Array.isArray(items) ? items.filter(x => x && x.k) : [];
+  const k = gBookKey(it.mk, it.s, it.no);
+  let prev = null;
+  const rest = [];
+  list.forEach(x => { if (x.k === k) { if (!prev) prev = x; } else rest.push(x); });
+  const row = {
+    k, mk: it.mk, s: it.s, n: it.n || it.s, no: it.no, sn: it.sn || '', lv: it.lv,
+    t: it.t, first: prev && prev.first ? prev.first : it.t, c: (prev && prev.c > 0 ? prev.c : 0) + 1
+  };
+  return [row].concat(rest).slice(0, G_BOOK_MAX);          // 最新的排前面，滿了就擠掉最舊的
+}
+function gBookStats(items) {
+  const list = Array.isArray(items) ? items.filter(x => x && x.k) : [];
+  const dist = [0, 0, 0, 0, 0];
+  const syms = {};
+  let draws = 0;
+  list.forEach(x => {
+    if (x.lv >= 0 && x.lv <= 4) dist[x.lv]++;
+    syms[x.mk + '|' + x.s] = 1;
+    draws += x.c > 0 ? x.c : 1;
+  });
+  return { n: list.length, dist, draws, syms: Object.keys(syms).length, kinds: dist.filter(v => v > 0).length };
+}
+
 /* 代號清單：逗號、全形逗號、空白、換行都可分隔；去重、超過上限的另外回報 */
 function gParseSyms(raw, max, upper) {
   const all = String(raw || '').split(/[,，、;\s]+/).filter(Boolean).map(x => upper ? x.toUpperCase() : x);
@@ -3334,7 +3439,7 @@ const gEsc = anEsc;
 const G_BETS = { TW: { chips: [1000, 10000, 50000], wallet: 100000 }, US: { chips: [100, 1000, 5000], wallet: 10000 } };
 const G_PEOPLE = 1000;
 const G_POOL_MAX = 30;           // 網頁即時掃描的上限（台股每檔約 6 次 FinMind 請求，免費額度每小時 300 次）
-const G = { seq: 0, ctx: null, R: null, ov: null, sym: '', name: '', source: '', cur: null, mc: null, mcState: 'none', tab: 'fortune', m: null, scan: null };
+const G = { seq: 0, ctx: null, R: null, ov: null, sym: '', name: '', source: '', cur: null, mc: null, mcState: 'none', tab: 'fortune', m: null, scan: null, want: 0, book: [] };
 
 // 台股取整數；美股有小數時固定兩位（整數金額如每注 US$1,000 不補 .00）
 const gNum = v => { const a = Math.abs(v), d = MK.key === 'US' && Math.round(a * 100) % 100 ? 2 : 0; return a.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }); };
@@ -3361,7 +3466,7 @@ function gApplyMarket(key) {
 /* 換市場或重新載入前，把上一檔股票的畫面清乾淨，避免舊結果配上新設定 */
 function gClear() {
   G.seq++;
-  Object.assign(G, { ctx: null, R: null, ov: null, cur: null, mc: null, mcState: 'none', m: null, scan: null });
+  Object.assign(G, { ctx: null, R: null, ov: null, cur: null, mc: null, mcState: 'none', m: null, scan: null, want: 0 });
   $g('#tubeWrap').className = 'tube-wrap';
   $g('#rankLive').innerHTML = ''; $g('#scanProg').innerHTML = '';
   $g('#btnScan').disabled = false; $g('#btnStop').hidden = true;
@@ -3428,11 +3533,14 @@ async function gDraw(fromLoad) {
     $g('#slip').innerHTML = `<h2>這一筒都是無字籤</h2><p>${STRATS.length} 支策略在這段期間都沒有出手過。換一檔股票，或把「看多久」拉長再試。</p>`;
     return;
   }
+  /* 連結指定了籤號就抽那一支（別人傳來的連結要能打開同一支籤），否則隨機 */
+  let want = null;
+  if (G.want) { const w = G.ov.rows[G.want - 1]; if (w && w.g) want = w; G.want = 0; }
   const quick = gNoMotion();
   tw.className = 'tube-wrap shake';
   await gWait(quick ? 0 : (fromLoad ? 700 : 1100));
   if (seq !== G.seq) return;
-  const x = pool[Math.floor(Math.random() * pool.length)];
+  const x = want || pool[Math.floor(Math.random() * pool.length)];
   $g('#pickNo').textContent = `第${x.no}籤`;
   tw.className = 'tube-wrap out';
   await gWait(quick ? 0 : 550);
@@ -3451,6 +3559,42 @@ function gShowSlip(no, scroll) {
   el.classList.remove('in'); void el.offsetWidth; el.classList.add('in');
   document.querySelectorAll('#listBox tbody tr').forEach(tr => tr.classList.toggle('cur', +tr.dataset.no === no));
   if (scroll) el.scrollIntoView({ behavior: gNoMotion() ? 'auto' : 'smooth', block: 'start' });
+  gBookPut(x);
+  gSyncURL();
+}
+
+/* ---------- 連結帶參數 ---------- */
+/* 網址永遠對著畫面上這一支籤，複製網址列就能分享。file:// 下 replaceState 會被擋，所以包 try。 */
+function gSlipURL() {
+  const q = gBuildQuery({ mk: MK.key, sym: G.sym, y: +$g('#period').value, no: G.cur });
+  return location.href.split(/[?#]/)[0] + (q ? '?' + q : '');
+}
+function gSyncURL() {
+  if (!G.sym || !G.cur) return;
+  try { history.replaceState(null, '', gSlipURL()); } catch (e) { }
+}
+
+/* 複製連結：clipboard API 在非 https 或沒權限時會失敗，退回舊的 execCommand，再不行就把網址秀出來讓人自己複製 */
+async function gCopyLink(btn) {
+  const url = gSlipURL();
+  let ok = false;
+  try { await navigator.clipboard.writeText(url); ok = true; } catch (e) { ok = false; }
+  if (!ok) {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = url; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      ok = document.execCommand('copy');
+      ta.remove();
+    } catch (e) { ok = false; }
+  }
+  if (ok) {
+    if (btn) { const t = btn.textContent; btn.textContent = '✅ 已複製連結'; setTimeout(() => { btn.textContent = t; }, 2000); }
+    gStatus(`已複製這支籤的連結：<code>${gEsc(url)}</code> <span class="dim">打開就會直接回到這一支籤。</span>`);
+  } else {
+    gStatus(`這個瀏覽器不讓程式複製，請手動複製：<input class="urlbox" readonly value="${gEsc(url)}">`);
+    const box = document.querySelector('.urlbox'); if (box) box.select();
+  }
 }
 
 function gTodayHTML(r) {
@@ -3504,6 +3648,7 @@ function gSlipHTML(x) {
       <button class="btn" type="button" data-act="redraw">🎋 再求一支</button>
       <button class="btn" type="button" data-act="daily">📅 今日定籤</button>
       <button class="btn ghost" type="button" data-act="share">🖼️ 存成籤詩卡</button>
+      <button class="btn ghost" type="button" data-act="link">🔗 複製連結</button>
     </div>`;
 }
 
@@ -3612,6 +3757,78 @@ function gShareCard(btn) {
   }, 'image/png');
 }
 
+/* ---------- 籤等收集簿 ---------- */
+/* 只存在這台裝置的瀏覽器裡（localStorage），不上傳、不跨裝置。存不進去（無痕模式、關掉儲存）時靜靜跳過，不影響求籤。 */
+function gBookLoad() {
+  try {
+    const o = JSON.parse(localStorage.getItem('qgame.book') || 'null');
+    return o && Array.isArray(o.items) ? o.items.filter(x => x && x.k) : [];
+  } catch (e) { return []; }
+}
+function gBookSave() {
+  try { localStorage.setItem('qgame.book', JSON.stringify({ v: G_BOOK_V, items: G.book })); } catch (e) { }
+}
+function gBookPut(x) {
+  if (!x || !x.g || !G.sym) return;
+  G.book = gBookAdd(G.book, { mk: MK.key, s: G.sym, n: G.name || G.sym, no: x.no, sn: x.r.name, lv: x.g.lv, t: Date.now() });
+  gBookSave();
+  if (G.tab === 'book') gRenderBook();
+}
+const gBookTime = t => {
+  const d = new Date(t), p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+};
+
+const G_BOOK_SHOW = 60;          // 表格最多列幾筆（紀錄本身留到 G_BOOK_MAX 筆）
+function gRenderBook() {
+  const items = G.book, st = gBookStats(items), el = $g('#bookBox');
+  const names = ['下下籤', '下籤', '中籤', '上籤', '上上籤'];
+  if (!items.length) {
+    el.innerHTML = `<h2>籤等收集簿</h2>
+      <p>還沒有任何紀錄。到「🎋 求籤」抽一支籤，這裡就會把它收進來。</p>
+      <p class="dim">紀錄只存在這台裝置的瀏覽器裡，不會上傳；換裝置、換瀏覽器或清掉瀏覽資料就會不見。</p>`;
+    return;
+  }
+  const rows = items.slice(0, G_BOOK_SHOW);
+  el.innerHTML = `
+    <h2>籤等收集簿　<small class="dim">只存在這台裝置</small></h2>
+    <div class="kpis">
+      <div class="stat"><div class="k">收集到的籤</div><div class="v">${st.n} <small class="dim">支</small></div><div class="f">同一檔的同一支只算一支</div></div>
+      <div class="stat"><div class="k">抽過</div><div class="v">${st.draws} <small class="dim">次</small></div><div class="f">含重複抽到的</div></div>
+      <div class="stat"><div class="k">求過籤的股票</div><div class="v">${st.syms} <small class="dim">檔</small></div><div class="f">台股與美股合計</div></div>
+      <div class="stat"><div class="k">籤等種類</div><div class="v">${st.kinds} <small class="dim">/ 5</small></div><div class="f">${st.kinds === 5 ? '五種都收齊了 🎉' : `還差 ${[4, 3, 2, 1, 0].filter(lv => !st.dist[lv]).map(lv => names[lv]).join('、')}`}</div></div>
+    </div>
+    <div class="bookgrid">${[4, 3, 2, 1, 0].map(lv => `
+      <div class="bookcell${st.dist[lv] ? '' : ' off'}">
+        <span class="grade sm g${lv}">${names[lv]}</span>
+        <b>${st.dist[lv]}</b>
+        <small>${st.dist[lv] ? '支' : '還沒收到'}</small>
+      </div>`).join('')}</div>
+    <p class="dim scrollhint">表格可以左右滑動。點任何一列，可以重新求一次那一檔的那支籤。</p>
+    <div class="tblwrap"><table>
+      <thead><tr><th>最近抽到</th><th>股票</th><th>籤號</th><th>籤等</th><th>策略</th><th>市場</th><th>抽到</th></tr></thead>
+      <tbody>${rows.map(x => `
+        <tr data-book="${gEsc(x.k)}"><td class="dim">${gBookTime(x.t)}</td>
+          <td>${gEsc(x.n && x.n !== x.s ? x.n : x.s)}<small class="dim"> ${gEsc(x.s)}</small></td>
+          <td>第 ${x.no} 籤</td><td><span class="grade sm g${x.lv}">${names[x.lv] || '—'}</span></td>
+          <td>${gEsc(x.sn)}</td><td>${MARKETS[x.mk] ? MARKETS[x.mk].label : gEsc(x.mk)}</td><td>${x.c} 次</td></tr>`).join('')}
+      </tbody></table></div>
+    ${items.length > rows.length ? `<p class="dim">只列最近 ${rows.length} 筆，收集簿裡共 ${items.length} 支（最多留 ${G_BOOK_MAX} 支，滿了會擠掉最舊的）。</p>` : ''}
+    <div class="acts">
+      <button class="btn ghost" type="button" data-act="bookclear">🗑️ 清空收集簿</button>
+    </div>
+    <p class="dim">籤等只代表「那段期間、那檔股票」的回測表現，收集簿是玩過的紀錄，不是績效。</p>`;
+}
+
+/* 從收集簿或好籤榜跳回求籤：換市場要先清畫面，再指定代號與籤號 */
+function gGoto(mk, sym, no) {
+  if (MARKETS[mk] && mk !== MK.key) { gClear(); gApplyMarket(mk); }
+  $g('#sym').value = sym;
+  G.want = no || 0;
+  window.scrollTo({ top: 0 });
+  gLoad('api');
+}
+
 /* ---------- 今日總運勢、整筒籤 ---------- */
 function gRenderOverview() {
   const o = G.ov, n = STRATS.length, el = $g('#overview');
@@ -3677,7 +3894,9 @@ function gShowTab(t) {
   $g('#pFortune').hidden = t !== 'fortune';
   $g('#pMachine').hidden = t !== 'machine';
   $g('#pRank').hidden = t !== 'rank';
+  $g('#pBook').hidden = t !== 'book';
   if (t === 'rank') gRankOpen();
+  if (t === 'book') gRenderBook();
 }
 
 /* ---------- 抽獎機 ---------- */
@@ -4084,14 +4303,17 @@ function gRenderAll() {
 
 /* ---------- 啟動 ---------- */
 function gInit() {
+  const P = gParseParams(location.search, Object.keys(MARKETS));
   let mk = 'TW';
   try { mk = localStorage.getItem('qgame.market') || 'TW'; } catch (e) { }
-  gApplyMarket(mk);
+  gApplyMarket(P.mk || mk);
   try { const s = localStorage.getItem('qgame.sym.' + MK.key); if (s) $g('#sym').value = s; } catch (e) { }
+  G.book = gBookLoad();
 
   $g('#mkSeg').addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b || b.dataset.m === MK.key) return;
     gClear(); gApplyMarket(b.dataset.m);
+    try { history.replaceState(null, '', location.href.split(/[?#]/)[0]); } catch (er) { }   // 網址裡上一檔的參數已經不對了
     try { const s = localStorage.getItem('qgame.sym.' + MK.key); if (s) $g('#sym').value = s; } catch (er) { }
     $g('#slip').innerHTML = `<h2>已切換到${MK.label}</h2><p>輸入${MK.label}代號（${gEsc(MK.hint)}），再按「誠心求籤」。</p>`;
     gStatus(`已切換到${MK.label}。`);
@@ -4110,6 +4332,20 @@ function gInit() {
     else if (a === 'poe') gThrowPoe();
     else if (a === 'daily') gDailyDraw();
     else if (a === 'share') gShareCard(b);
+    else if (a === 'link') gCopyLink(b);
+  });
+  /* 清空收集簿要按兩次：這一清就沒了，誤觸很冤 */
+  $g('#pBook').addEventListener('click', e => {
+    const b = e.target.closest('[data-act="bookclear"]');
+    if (b) {
+      if (b.dataset.sure === '1') { G.book = []; gBookSave(); gRenderBook(); gStatus('收集簿已清空。'); }
+      else { b.dataset.sure = '1'; b.textContent = '⚠ 再按一次就清空'; }
+      return;
+    }
+    const tr = e.target.closest('[data-book]');
+    if (!tr) return;
+    const p = String(tr.dataset.book).split('|');
+    if (p.length === 3) gGoto(p[0], p[1], +p[2]);
   });
   $g('#listBox').addEventListener('click', e => {
     const tr = e.target.closest('tr[data-no]'); if (tr) gShowSlip(+tr.dataset.no, true);
@@ -4169,6 +4405,15 @@ function gInit() {
     window.scrollTo({ top: 0 });
     gLoad('api');
   });
+
+  /* 連結帶來的參數最後才套：要蓋過 localStorage 記住的上一檔，而且事件都綁好了才開始載入 */
+  if (P.y) $g('#period').value = String(P.y);
+  if (P.sym) {
+    $g('#sym').value = P.sym;
+    G.want = P.no || 0;
+    gLoad('api');
+  }
+  if (P.tab) gShowTab(P.tab);        // 放在 gLoad 之後：gLoad 會先把分頁切回「求籤」
 
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('../sw.js').catch(() => { });
 }
