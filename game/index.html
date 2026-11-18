@@ -118,6 +118,22 @@ input:focus, select:focus, button:focus-visible { outline: 3px solid var(--gold)
 /* 籤詩是七言對仗，窄螢幕若從句子中間斷行就毀了。每句各自一行、不換行，字級隨寬度縮放 */
 .verse { font: 700 clamp(13px, 4.1vw, 17px)/1.9 var(--serif); text-align: center; background: var(--paper2); border-radius: 8px; padding: 10px 4px; margin: 10px 0; color: var(--red2); letter-spacing: clamp(0px, 0.55vw, 3px); }
 .verse span { display: block; white-space: nowrap; }
+/* 並排比較 */
+table.cmp th:first-child { text-align: left; white-space: nowrap; background: var(--paper2); position: sticky; left: 0; z-index: 1; }
+table.cmp thead th { text-align: center; }
+table.cmp td { text-align: center; }
+table.cmp td.win { background: #fdf0cc; font-weight: 700; box-shadow: inset 0 0 0 1px var(--gold2); }
+.lnk { font: inherit; font-weight: 700; background: none; border: 0; padding: 0; color: var(--red); cursor: pointer; text-decoration: underline; }
+.lnk small { display: block; font-weight: 400; font-size: 11px; color: var(--mut); text-decoration: none; }
+
+/* 搜尋結果 */
+#rankFind { width: auto; flex: 1 1 220px; min-width: 180px; height: 38px; }
+.findbox { background: var(--paper2); border: 1px solid var(--line); border-radius: 8px; padding: 10px; margin: 10px 0; }
+.findrow { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; padding: 6px 0; border-top: 1px dashed var(--line); }
+.findrow:first-of-type { border-top: 0; }
+.findno { font: 700 15px var(--sans); color: var(--red); white-space: nowrap; }
+.findno .mv { display: inline; margin-left: 4px; }
+
 /* 名次變化 */
 .mv { display: block; font: 700 11px var(--sans); letter-spacing: 0; margin-top: 2px; white-space: nowrap; }
 .mv.up { color: var(--up); } .mv.dn { color: var(--dn); } .mv.flat { color: var(--mut); } .mv.new { color: #8a6410; }
@@ -3186,6 +3202,30 @@ function gRankSort(rows, key) {
 }
 /* 只看今天有買進訊號的股票（買進數來自上籤以上的策略） */
 function gRankFilter(rows, onlyBuy) { return onlyBuy ? rows.filter(x => x.buy > 0) : rows.slice(); }
+
+/* 並排比較：少數幾檔放成表格一列一個指標，比一張張卡片好比。
+   dir 1 = 數字大的好、0 = 不分高下（只是陳述，不標贏家）。
+   bhMdd 是負數（回撤），取最大＝跌得最少，所以也是 dir 1。 */
+const G_CMP = [
+  { k: 'good', label: '好籤數（上籤以上）', dir: 1 },
+  { k: 'played', label: '有出手的策略', dir: 1 },
+  { k: 'rtp', label: '平均回報率', dir: 1 },
+  { k: 'bh', label: '抱著不動', dir: 1 },
+  { k: 'bhMdd', label: '抱著不動的中途最慘', dir: 1 },
+  { k: 'buy', label: '今天買進訊號', dir: 1 },
+  { k: 'hold', label: '今天持有中', dir: 0 }
+];
+const G_CMP_MAX = 5;
+function gCmpWinners(rows, k, dir) {
+  if (!dir) return [];
+  const v = rows.map(x => { const a = x ? x[k] : null; return (a == null || isNA(a)) ? null : a; });
+  const ok = v.filter(a => a !== null);
+  if (ok.length < 2) return [];                       // 只有一檔有數字就沒有「比」可言
+  const best = Math.max.apply(null, ok);
+  const win = [];
+  v.forEach((a, i) => { if (a === best) win.push(i); });
+  return win.length === rows.length ? [] : win;       // 全部並列就不標，標了也沒意義
+}
 /* 資料過期的股票不列入排名（已下市、長期停牌的，拿一段舊行情跟還在交易的股票比不公平）。
    基準用「這批資料裡最新的一天」而不是今天：排行可能是前幾天在電腦上算好的，用今天比會整批誤判。
    門檻 10 天是為了不誤殺冷門股——冷門股連續幾天沒成交時 FinMind 的收盤價是 0、那幾天不會有 K 棒，
@@ -3891,6 +3931,65 @@ function gRankHTML(rows, limit, move) {
     </table></div></details>` : ''}`;
 }
 
+/* 目前這個市場的全池排行（排除資料過期的、套用排序與篩選）。排行本體與搜尋共用同一份結果 */
+function gRankRows() {
+  const D = (G_ALL.state[MK.key] === 'ok' && window.QGAME_RANK) ? window.QGAME_RANK[MK.key] : null;
+  if (!D) return null;
+  return {
+    D,
+    rows: gRankSort(gRankFilter(gSplitStale(D.rows).fresh, G_ALL.onlyBuy), G_ALL.sort),
+    move: !!D.baseDate && G_ALL.sort === 'good' && !G_ALL.onlyBuy
+  };
+}
+
+/* 搜尋：在幾百檔裡找自己的股票現在排第幾，不用捲完整張表 */
+function gFindHTML(rows, move) {
+  const q = G_ALL.find.trim().toLowerCase();
+  if (!q) return '';
+  const hit = [];
+  rows.forEach((x, i) => {
+    if (hit.length >= 6) return;
+    if (String(x.s).toLowerCase().includes(q) || String(x.n || '').toLowerCase().includes(q)) hit.push({ x, i });
+  });
+  if (!hit.length) return `<p class="note">在這 ${rows.length} 檔裡找不到「${gEsc(G_ALL.find)}」。它可能不在股票池裡，或因為資料過期沒有列入排名。</p>`;
+  return `<div class="findbox">
+    <p class="dim">找到 ${hit.length} 檔${hit.length >= 6 ? '（只顯示前 6 筆）' : ''}，共 ${rows.length} 檔參與排名：</p>
+    ${hit.map(h => `<div class="findrow">
+      <span class="findno">第 <b>${h.i + 1}</b> 名${gMoveHTML(h.x, h.i, move)}</span>
+      <button class="lnk" type="button" data-go="${gEsc(h.x.s)}">${gEsc(h.x.n && h.x.n !== h.x.s ? h.x.n : h.x.s)}<small>${gEsc(h.x.s)}</small></button>
+      <span class="dim">好籤 <b>${h.x.good}</b> 支　·　平均回報率 ${gRtp(h.x.rtp)}　·　抱著不動 <span class="${anCls(h.x.bh)}">${anPc(h.x.bh)}</span>　·　今天買進 ${h.x.buy}</span>
+    </div>`).join('')}
+  </div>`;
+}
+
+/* 並排比較：2～5 檔時把指標排成一列一項，直接看誰贏 */
+function gCompareHTML(rows) {
+  const fmt = {
+    good: x => `<b>${x.good}</b> 支`,
+    played: x => `${x.played} / ${STRATS.length} 支`,
+    rtp: x => `<span class="${isNA(x.rtp) ? '' : anCls(x.rtp - 100)}">${gRtp(x.rtp)}</span>`,
+    bh: x => `<span class="${anCls(x.bh)}">${anPc(x.bh)}</span>`,
+    bhMdd: x => `<span class="${anCls(x.bhMdd)}">${anPc(x.bhMdd)}</span>`,
+    buy: x => `${x.buy} 支`,
+    hold: x => `${x.hold} 支`
+  };
+  return `
+    <h2>並排比較　<small class="dim">${rows.length} 檔</small></h2>
+    <p class="dim scrollhint">表格可以左右滑動。</p>
+    <div class="tblwrap"><table class="cmp">
+      <thead><tr><th>比什麼</th>${rows.map(x => `<th><button class="lnk" type="button" data-go="${gEsc(x.s)}">${gEsc(x.n && x.n !== x.s ? x.n : x.s)}<small>${gEsc(x.s)}</small></button></th>`).join('')}</tr></thead>
+      <tbody>
+        ${G_CMP.map(m => {
+    const win = gCmpWinners(rows, m.k, m.dir);
+    return `<tr><th>${m.label}</th>${rows.map((x, i) => `<td class="${win.includes(i) ? 'win' : ''}">${fmt[m.k](x)}</td>`).join('')}</tr>`;
+  }).join('')}
+        <tr><th>最好的籤</th>${rows.map(x => `<td>${x.best ? `<span class="grade sm g${x.best.lv}">${G_GRADES[x.best.lv].name}</span> ${gEsc(x.best.name)}` : '—'}</td>`).join('')}</tr>
+        <tr><th>資料到</th>${rows.map(x => `<td class="dim">${gDate(x.asOf)}</td>`).join('')}</tr>
+      </tbody>
+    </table></div>
+    <p class="dim">金色格子是該列最好的。「抱著不動」是第一天買進一路抱到最後的結果，不是策略的成績。</p>`;
+}
+
 function gRenderScan() {
   const S = G.scan, prog = $g('#scanProg'), box = $g('#rankLive');
   if (!S) { prog.innerHTML = ''; box.innerHTML = ''; return; }
@@ -3904,7 +4003,8 @@ function gRenderScan() {
   const rows = gRankSort(gSplitStale(S.rows).fresh);
   box.innerHTML = rows.length ? `<section class="card paper">
     <h2>${S.busy ? '目前排行' : '前 5 名'}　<small class="dim">${MARKETS[S.mk].label} · 近 ${S.yrs} 年 · 已掃 ${S.rows.length} 檔</small></h2>
-    ${gRankHTML(rows)}</section>` : '';
+    ${gRankHTML(rows)}</section>${!S.busy && rows.length >= 2 && rows.length <= G_CMP_MAX
+      ? `<section class="card paper">${gCompareHTML(rows)}</section>` : ''}` : '';
 }
 
 async function gScan() {
@@ -3940,7 +4040,7 @@ async function gScan() {
 }
 
 /* 全池排行：由 tools/scan_pool.js 在電腦上預先算好，存成 rank_TW.js / rank_US.js 放在本頁旁邊 */
-const G_ALL = { state: {}, sort: 'good', onlyBuy: false };   // state[mk] = 'loading' | 'ok' | 'none'
+const G_ALL = { state: {}, sort: 'good', onlyBuy: false, find: '', findT: 0 };   // state[mk] = 'loading' | 'ok' | 'none'
 try {
   const s = localStorage.getItem('qgame.rank.sort');
   if (s && G_SORTS[s]) G_ALL.sort = s;
@@ -3965,9 +4065,7 @@ function gRenderAll() {
       : `<p>還沒有${MK.label}的全池排行。</p><p class="dim">整個股票池太大，網頁沒辦法即時掃完，要在電腦上執行 <b>tools\\scan_pool.bat</b> 預先算好（做法見 README）。</p>`}`;
     return;
   }
-  const F = gSplitStale(D.rows);
-  const rows = gRankSort(gRankFilter(F.fresh, G_ALL.onlyBuy), G_ALL.sort);
-  const move = !!D.baseDate && G_ALL.sort === 'good' && !G_ALL.onlyBuy;
+  const R = gRankRows(), rows = R.rows, move = R.move;
   el.innerHTML = `
     <h2>好籤榜｜整個股票池　<small class="dim">${MK.label} · 近 ${D.years} 年</small></h2>
     <p>從 <b>${D.pool}</b> 檔股票池裡成功掃了 <b>${D.rows.length}</b> 檔${D.failed ? `（${D.failed} 檔沒有結果）` : ''}，於 <b>${gEsc(D.generatedAt)}</b> 算好${D.partial ? '；<b>這一份還沒掃完整個池</b>' : ''}。這是預先算好的結果，不是即時的。</p>
@@ -3975,9 +4073,11 @@ function gRenderAll() {
       <label for="rankSort">排序</label>
       <select id="rankSort">${Object.keys(G_SORTS).map(k => `<option value="${k}"${k === G_ALL.sort ? ' selected' : ''}>${G_SORTS[k].label}</option>`).join('')}</select>
       <label class="chk"><input type="checkbox" id="rankBuy"${G_ALL.onlyBuy ? ' checked' : ''}>只看今天有買進訊號</label>
+      <input id="rankFind" type="search" spellcheck="false" autocomplete="off" placeholder="找代號或名稱，看它排第幾" value="${gEsc(G_ALL.find)}">
       ${G_ALL.onlyBuy ? `<span class="dim">符合 ${rows.length} 檔</span>` : ''}
       ${move ? `<span class="dim">▲▼ 是和 ${gEsc(D.baseDate)} 的排名相比</span>` : (D.baseDate ? '<span class="dim">換回「好籤數」排序才看得到名次變化</span>' : '')}
     </div>
+    <div id="rankFindBox">${gFindHTML(rows, move)}</div>
     ${rows.length ? gRankHTML(rows, 50, move) : '<p class="note">今天沒有任何一檔的上籤策略發出買進訊號。</p>'}`;
   el.dataset.years = D.years;
 }
@@ -4013,6 +4113,16 @@ function gInit() {
   });
   $g('#listBox').addEventListener('click', e => {
     const tr = e.target.closest('tr[data-no]'); if (tr) gShowSlip(+tr.dataset.no, true);
+  });
+  /* 只換搜尋結果那一塊，不重畫整張排行：重畫會把輸入框整個換掉，中文輸入法打到一半會被打斷 */
+  $g('#rankAll').addEventListener('input', e => {
+    if (e.target.id !== 'rankFind') return;
+    G_ALL.find = e.target.value;
+    clearTimeout(G_ALL.findT);
+    G_ALL.findT = setTimeout(() => {
+      const box = $g('#rankFindBox'), R = gRankRows();
+      if (box && R) box.innerHTML = gFindHTML(R.rows, R.move);
+    }, 220);
   });
   $g('#rankAll').addEventListener('change', e => {
     if (e.target.id === 'rankSort') G_ALL.sort = G_SORTS[e.target.value] ? e.target.value : 'good';
