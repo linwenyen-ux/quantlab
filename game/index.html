@@ -118,6 +118,22 @@ input:focus, select:focus, button:focus-visible { outline: 3px solid var(--gold)
 /* 籤詩是七言對仗，窄螢幕若從句子中間斷行就毀了。每句各自一行、不換行，字級隨寬度縮放 */
 .verse { font: 700 clamp(13px, 4.1vw, 17px)/1.9 var(--serif); text-align: center; background: var(--paper2); border-radius: 8px; padding: 10px 4px; margin: 10px 0; color: var(--red2); letter-spacing: clamp(0px, 0.55vw, 3px); }
 .verse span { display: block; white-space: nowrap; }
+/* 名次變化 */
+.mv { display: block; font: 700 11px var(--sans); letter-spacing: 0; margin-top: 2px; white-space: nowrap; }
+.mv.up { color: var(--up); } .mv.dn { color: var(--dn); } .mv.flat { color: var(--mut); } .mv.new { color: #8a6410; }
+td .mv { display: inline; margin-left: 4px; }
+
+/* 好籤榜的排序／篩選列 */
+.rank-ctl { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; background: var(--paper2); border: 1px solid var(--line); border-radius: 8px; padding: 10px; margin: 10px 0; }
+.rank-ctl select { width: auto; min-width: 150px; height: 38px; }
+.rank-ctl .chk { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.rank-ctl .chk input { width: 18px; height: 18px; }
+
+/* 翻倍還是破產 */
+.challbar { display: flex; height: 30px; border-radius: 6px; overflow: hidden; margin: 10px 0; font: 700 12px var(--sans); color: #fff; }
+.challbar span { display: flex; align-items: center; justify-content: center; min-width: 0; white-space: nowrap; }
+.challbar .cw { background: var(--up); } .challbar .cb { background: var(--dn); } .challbar .cn { background: #9c8158; }
+
 /* 擲筊 */
 .poe { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; background: var(--paper2); border: 1px solid var(--line); border-radius: 8px; padding: 10px; margin: 10px 0; }
 .poe-pair { display: flex; gap: 10px; }
@@ -381,6 +397,7 @@ textarea:focus { outline: 3px solid var(--gold); outline-offset: 1px; }
             </div>
           </section>
           <section class="card paper" id="crowdBox"></section>
+          <section class="card paper" id="challBox"></section>
         </div>
         <div class="mcol">
           <section class="card paper" id="specBox"></section>
@@ -3038,6 +3055,36 @@ function gCrowd(rets, pulls, people, bet, rng) {
   };
 }
 
+/* 翻倍還是破產：一直拉到錢包翻倍或輸到押不起，看一千個人各自的下場。
+   maxPulls 是保險絲——期望值為正、波動又小的機器可能很久都碰不到任何一邊，不設上限會一直跑。 */
+function gChallenge(rets, bet, wallet, people, maxPulls, rng) {
+  rng = rng || Math.random;
+  const n = rets.length, target = wallet * 2;
+  let win = 0, bust = 0, none = 0, winP = 0, bustP = 0;
+  const all = [];
+  for (let p = 0; p < people; p++) {
+    let w = wallet, k = 0;                             // k ＝ 實際拉了幾次
+    while (k < maxPulls) {
+      if (w < bet) break;                              // 押不起了＝破產
+      w += bet * rets[Math.floor(rng() * n)];
+      k++;
+      if (w >= target) break;
+    }
+    all.push(k);
+    if (w >= target) { win++; winP += k; }
+    else if (w < bet) { bust++; bustP += k; }
+    else none++;
+  }
+  const sorted = all.slice().sort((a, b) => a - b);
+  return {
+    people, bet, wallet, target, maxPulls,
+    win, bust, none,
+    winShare: win / people, bustShare: bust / people, noneShare: none / people,
+    winPulls: win ? winP / win : NA, bustPulls: bust ? bustP / bust : NA,
+    medPulls: sorted[Math.floor((people - 1) / 2)]
+  };
+}
+
 /* 直方圖分箱；0 一定落在箱界上，才能把賺／賠分開上色 */
 function gBins(sorted, bins) {
   const lo = sorted[0], hi = sorted[sorted.length - 1];
@@ -3121,11 +3168,24 @@ function gStockScore(R) {
     best: best ? { name: best.r.name, lv: best.g.lv, rtp: best.spec.rtp, tot: best.r.tot } : null
   };
 }
-/* 好籤多的在前；同數比平均回報率；再同比代號，讓結果固定可重現 */
-function gRankSort(rows) {
-  const v = x => isNA(x.rtp) ? -1e9 : x.rtp;
-  return rows.slice().sort((a, b) => (b.good - a.good) || (v(b) - v(a)) || (a.s < b.s ? -1 : a.s > b.s ? 1 : 0));
+/* 排行可以換一種排法；不管哪一種，最後都用代號當決勝，結果才固定可重現。
+   預設 good：好籤多的在前，同數比平均回報率。 */
+const G_RTP = x => isNA(x.rtp) ? -1e9 : x.rtp;
+const G_SORTS = {
+  good: { label: '好籤數', keys: [x => x.good, G_RTP] },
+  rtp: { label: '平均回報率', keys: [G_RTP, x => x.good] },
+  bh: { label: '抱著不動', keys: [x => x.bh, x => x.good] },
+  buy: { label: '今天買進訊號', keys: [x => x.buy, x => x.good, G_RTP] }
+};
+function gRankSort(rows, key) {
+  const keys = (G_SORTS[key] || G_SORTS.good).keys;
+  return rows.slice().sort((a, b) => {
+    for (const k of keys) { const d = k(b) - k(a); if (d) return d; }
+    return a.s < b.s ? -1 : a.s > b.s ? 1 : 0;
+  });
 }
+/* 只看今天有買進訊號的股票（買進數來自上籤以上的策略） */
+function gRankFilter(rows, onlyBuy) { return onlyBuy ? rows.filter(x => x.buy > 0) : rows.slice(); }
 /* 資料過期的股票不列入排名（已下市、長期停牌的，拿一段舊行情跟還在交易的股票比不公平）。
    基準用「這批資料裡最新的一天」而不是今天：排行可能是前幾天在電腦上算好的，用今天比會整批誤判。
    門檻 10 天是為了不誤殺冷門股——冷門股連續幾天沒成交時 FinMind 的收盤價是 0、那幾天不會有 K 棒，
@@ -3593,7 +3653,7 @@ function gFillMachines() {
 function gSetMachine(no) {
   const x = G.ov.rows[no - 1], B = G_BETS[MK.key];
   const bet = G.m && B.chips.includes(G.m.bet) ? G.m.bet : B.chips[1];
-  G.m = { no, x, spec: x.spec, bet, start: B.wallet, wallet: B.wallet, pulls: [], busy: false, crowd: null, crowdN: G.m ? G.m.crowdN : 50 };
+  G.m = { no, x, spec: x.spec, bet, start: B.wallet, wallet: B.wallet, pulls: [], busy: false, crowd: null, crowdN: G.m ? G.m.crowdN : 50, chall: null };
   $g('#mSel').value = String(no);
   $g('#mName').textContent = `${x.r.name}　×　${G.name}（${G.sym}）`;
   $g('#mNote').textContent = x.spec.n < G_MIN_TRADES
@@ -3602,7 +3662,7 @@ function gSetMachine(no) {
   const num = $g('#slotNum'); num.textContent = '—'; num.className = 'slot-num';
   $g('#slotMsg').textContent = '按「拉一次」開始';
   $g('#slotSrc').textContent = '每拉一次，就從這支策略的歷史交易裡隨機抽一筆當結果。';
-  gRenderBets(); gRenderSpec(); gRenderPlay(); gRenderCrowd(); gSetBtns();
+  gRenderBets(); gRenderSpec(); gRenderPlay(); gRenderCrowd(); gRenderChall(); gSetBtns();
 }
 
 function gRenderBets() {
@@ -3716,6 +3776,44 @@ function gCrowdInsight(M, c) {
   return '回報率是負的，這次模擬裡沒有人賺錢。';
 }
 
+/* 翻倍還是破產：一樣用 1000 個人跑，但看的是「誰先到終點」而不是固定抽幾次 */
+const G_CHALL_MAX = 500;
+function gRenderChall() {
+  const M = G.m, c = M.chall, W = M.start;
+  const pc = v => (v * 100).toFixed(1) + '%';
+  $g('#challBox').innerHTML = `
+    <h2>翻倍還是破產</h2>
+    <p>每人都從 ${gMoney(W)} 開始，每次押 ${gMoney(M.bet)}，一直拉到<b>錢包翻倍（${gMoney(W * 2)}）</b>或<b>輸到押不起</b>為止。最多拉 ${G_CHALL_MAX} 次。</p>
+    <div class="crowd-ctl">
+      <button class="btn" type="button" id="btnChall">▶ 讓 ${G_PEOPLE.toLocaleString('en-US')} 個人試</button>
+      <span class="dim">換籌碼或換機器會重新算</span>
+    </div>
+    ${c ? `
+    <div class="challbar">
+      ${c.win ? `<span class="cw" style="flex:${c.win}">翻倍 ${pc(c.winShare)}</span>` : ''}
+      ${c.bust ? `<span class="cb" style="flex:${c.bust}">破產 ${pc(c.bustShare)}</span>` : ''}
+      ${c.none ? `<span class="cn" style="flex:${c.none}">沒結果 ${pc(c.noneShare)}</span>` : ''}
+    </div>
+    <div class="big-rtp">
+      <div class="stat"><div class="k">翻倍的人</div><div class="v up">${c.win.toLocaleString('en-US')}</div><div class="f">${c.win ? `平均拉 ${Math.round(c.winPulls)} 次` : '沒有人翻倍'}</div></div>
+      <div class="stat"><div class="k">破產的人</div><div class="v dn">${c.bust.toLocaleString('en-US')}</div><div class="f">${c.bust ? `平均拉 ${Math.round(c.bustPulls)} 次` : '沒有人破產'}</div></div>
+      <div class="stat"><div class="k">拉滿 ${G_CHALL_MAX} 次還沒結果</div><div class="v">${c.none.toLocaleString('en-US')}</div><div class="f">兩邊都沒碰到</div></div>
+      <div class="stat"><div class="k">中位數拉幾次</div><div class="v">${c.medPulls}</div><div class="f">一半的人在這之前就結束</div></div>
+    </div>
+    <div class="note">${gChallInsight(M, c)}</div>` : ''}`;
+}
+function gChallInsight(M, c) {
+  const W = M.start, ratio = M.bet / W;
+  if (!c.win && !c.bust) return `押得太小（每注只有錢包的 ${(ratio * 100).toFixed(1)}%），${G_CHALL_MAX} 次之內兩邊都碰不到。把籌碼調大再試。`;
+  const odds = c.bust ? (c.win / c.bust) : Infinity;
+  const base = `每注是錢包的 ${(ratio * 100).toFixed(1)}%。`;
+  if (c.winShare >= 0.6) return `${base}這台機器長期期望是賺的（回報率 ${gRtp(M.spec.rtp)}），所以多數人撐得到翻倍。`
+    + (c.bust ? `不過仍有 ${(c.bustShare * 100).toFixed(1)}% 的人先破產——期望值為正，不保證你不會是那一群。`
+      : `這次沒有人在 ${G_CHALL_MAX} 次之內破產，但那是因為獎池只有 ${M.spec.n} 筆歷史交易、抽來抽去都是同幾筆，別把它當成「不會賠」。`);
+  if (c.bustShare >= 0.6) return `${base}破產的人比翻倍的多。回報率 ${gRtp(M.spec.rtp)} 低於 100 元時，拉越多次越不利。`;
+  return `${base}翻倍與破產的比例約 ${odds === Infinity ? '全部翻倍' : odds.toFixed(2) + ' : 1'}。把籌碼調大，兩邊的結果都會來得更快、也更極端。`;
+}
+
 function gRenderCrowd() {
   const M = G.m, c = M.crowd;
   $g('#crowdBox').innerHTML = `
@@ -3759,11 +3857,20 @@ function gRankOpen() {
 }
 
 /* rows 已排序；前 5 名用卡片，完整排行收在表格裡（limit = 表格最多列幾名） */
-function gRankHTML(rows, limit) {
+/* 名次變化：只有在預設排序下才有意義（基準是用預設排序存下來的），換排序就不顯示 */
+function gMoveHTML(x, i, show) {
+  if (!show || !x) return '';
+  if (!x.pr) return '<span class="mv new">NEW</span>';
+  const d = x.pr - (i + 1);
+  if (!d) return '<span class="mv flat">—</span>';
+  return `<span class="mv ${d > 0 ? 'up' : 'dn'}">${d > 0 ? '▲' : '▼'}${Math.abs(d)}</span>`;
+}
+
+function gRankHTML(rows, limit, move) {
   const total = STRATS.length;
   const card = (x, i) => `
     <div class="rk${i === 0 ? ' r1' : ''}">
-      <div class="rk-no">${i + 1}</div>
+      <div class="rk-no">${i + 1}${gMoveHTML(x, i, move)}</div>
       <div class="rk-main">
         <div class="rk-name">${x.n && x.n !== x.s ? `${gEsc(x.n)}<small>${gEsc(x.s)}</small>` : gEsc(x.s)}</div>
         <div class="rk-good">好籤 <b>${x.good}</b> 支　<span class="dim">有出手 ${x.played} / ${total} 支</span></div>
@@ -3779,7 +3886,7 @@ function gRankHTML(rows, limit) {
     ${rows.length > 5 ? `<details><summary>看完整排行（${rest.length < rows.length ? `前 ${rest.length} 名，共 ${rows.length} 檔` : `共 ${rows.length} 檔`}）</summary>
     <div class="tblwrap"><table>
       <thead><tr><th>名次</th><th>股票</th><th>代號</th><th>好籤</th><th>有出手</th><th>平均回報率</th><th>抱著不動</th><th>好籤今天買進</th><th>好籤持有中</th></tr></thead>
-      <tbody>${rest.map((x, i) => `<tr data-go="${gEsc(x.s)}"><td>${i + 1}</td><td>${gEsc(x.n || x.s)}</td><td>${gEsc(x.s)}</td><td><b>${x.good}</b></td><td>${x.played}</td>
+      <tbody>${rest.map((x, i) => `<tr data-go="${gEsc(x.s)}"><td>${i + 1}${gMoveHTML(x, i, move)}</td><td>${gEsc(x.n || x.s)}</td><td>${gEsc(x.s)}</td><td><b>${x.good}</b></td><td>${x.played}</td>
         <td class="${isNA(x.rtp) ? '' : anCls(x.rtp - 100)}">${gRtp(x.rtp)}</td><td class="${anCls(x.bh)}">${anPc(x.bh)}</td><td>${x.buy}</td><td>${x.hold}</td></tr>`).join('')}</tbody>
     </table></div></details>` : ''}`;
 }
@@ -3833,7 +3940,12 @@ async function gScan() {
 }
 
 /* 全池排行：由 tools/scan_pool.js 在電腦上預先算好，存成 rank_TW.js / rank_US.js 放在本頁旁邊 */
-const G_ALL = { state: {} };            // state[mk] = 'loading' | 'ok' | 'none'
+const G_ALL = { state: {}, sort: 'good', onlyBuy: false };   // state[mk] = 'loading' | 'ok' | 'none'
+try {
+  const s = localStorage.getItem('qgame.rank.sort');
+  if (s && G_SORTS[s]) G_ALL.sort = s;
+  G_ALL.onlyBuy = localStorage.getItem('qgame.rank.buy') === '1';
+} catch (e) { }
 function gLoadAll(mk) {
   if (G_ALL.state[mk]) return;
   if (window.QGAME_RANK && window.QGAME_RANK[mk]) { G_ALL.state[mk] = 'ok'; return; }
@@ -3853,11 +3965,20 @@ function gRenderAll() {
       : `<p>還沒有${MK.label}的全池排行。</p><p class="dim">整個股票池太大，網頁沒辦法即時掃完，要在電腦上執行 <b>tools\\scan_pool.bat</b> 預先算好（做法見 README）。</p>`}`;
     return;
   }
-  const F = gSplitStale(D.rows), rows = gRankSort(F.fresh);
+  const F = gSplitStale(D.rows);
+  const rows = gRankSort(gRankFilter(F.fresh, G_ALL.onlyBuy), G_ALL.sort);
+  const move = !!D.baseDate && G_ALL.sort === 'good' && !G_ALL.onlyBuy;
   el.innerHTML = `
     <h2>好籤榜｜整個股票池　<small class="dim">${MK.label} · 近 ${D.years} 年</small></h2>
     <p>從 <b>${D.pool}</b> 檔股票池裡成功掃了 <b>${D.rows.length}</b> 檔${D.failed ? `（${D.failed} 檔沒有結果）` : ''}，於 <b>${gEsc(D.generatedAt)}</b> 算好${D.partial ? '；<b>這一份還沒掃完整個池</b>' : ''}。這是預先算好的結果，不是即時的。</p>
-    ${gRankHTML(rows, 50)}`;
+    <div class="rank-ctl">
+      <label for="rankSort">排序</label>
+      <select id="rankSort">${Object.keys(G_SORTS).map(k => `<option value="${k}"${k === G_ALL.sort ? ' selected' : ''}>${G_SORTS[k].label}</option>`).join('')}</select>
+      <label class="chk"><input type="checkbox" id="rankBuy"${G_ALL.onlyBuy ? ' checked' : ''}>只看今天有買進訊號</label>
+      ${G_ALL.onlyBuy ? `<span class="dim">符合 ${rows.length} 檔</span>` : ''}
+      ${move ? `<span class="dim">▲▼ 是和 ${gEsc(D.baseDate)} 的排名相比</span>` : (D.baseDate ? '<span class="dim">換回「好籤數」排序才看得到名次變化</span>' : '')}
+    </div>
+    ${rows.length ? gRankHTML(rows, 50, move) : '<p class="note">今天沒有任何一檔的上籤策略發出買進訊號。</p>'}`;
   el.dataset.years = D.years;
 }
 
@@ -3893,11 +4014,18 @@ function gInit() {
   $g('#listBox').addEventListener('click', e => {
     const tr = e.target.closest('tr[data-no]'); if (tr) gShowSlip(+tr.dataset.no, true);
   });
+  $g('#rankAll').addEventListener('change', e => {
+    if (e.target.id === 'rankSort') G_ALL.sort = G_SORTS[e.target.value] ? e.target.value : 'good';
+    else if (e.target.id === 'rankBuy') G_ALL.onlyBuy = e.target.checked;
+    else return;
+    try { localStorage.setItem('qgame.rank.sort', G_ALL.sort); localStorage.setItem('qgame.rank.buy', G_ALL.onlyBuy ? '1' : '0'); } catch (er) { }
+    gRenderAll();
+  });
 
   $g('#mSel').addEventListener('change', e => gSetMachine(+e.target.value));
   $g('#bets').addEventListener('click', e => {
     const b = e.target.closest('[data-bet]'); if (!b || !G.m || G.m.busy) return;
-    G.m.bet = +b.dataset.bet; gRenderBets(); gSetBtns(); gRenderCrowd();
+    G.m.bet = +b.dataset.bet; G.m.chall = null; gRenderBets(); gSetBtns(); gRenderCrowd(); gRenderChall();
   });
   $g('#btnPull').addEventListener('click', () => gPull(1));
   $g('#btnPull10').addEventListener('click', () => gPull(10));
@@ -3910,6 +4038,12 @@ function gInit() {
     gRenderCrowd();
   });
   $g('#crowdBox').addEventListener('change', e => { if (e.target.id === 'crowdN' && G.m) G.m.crowdN = +e.target.value; });
+  $g('#challBox').addEventListener('click', e => {
+    if (!e.target.closest('#btnChall') || !G.m) return;
+    const M = G.m;
+    M.chall = gChallenge(M.spec.rets, M.bet, M.start, G_PEOPLE, G_CHALL_MAX);
+    gRenderChall();
+  });
 
   $g('#btnScan').addEventListener('click', gScan);
   $g('#btnStop').addEventListener('click', () => { if (G.scan) G.scan.stop = true; });
