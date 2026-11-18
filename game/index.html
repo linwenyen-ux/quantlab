@@ -373,7 +373,7 @@ textarea:focus { outline: 3px solid var(--gold); outline-offset: 1px; }
         <li><b>同數時：</b>比「平均回報率」（有出手的策略，每投 100 元平均拿回幾元的平均值）。</li>
       </ol>
       <p>好籤多，代表這檔股票在這段期間讓比較多種策略都有效，比較不是靠單一策略碰運氣。它不代表股票本身會漲，也不代表未來同樣有效。</p>
-      <p><b>資料過期的不排名：</b>最後一筆行情比這批資料的最新一天落後超過 10 天的股票（多半是已下市或長期停牌），不列入排行，並在上方列出是哪幾檔。冷門股偶爾幾天沒成交不會被排除。</p>
+      <p><b>資料過期的不排名：</b>最後一筆行情比這批資料的最新一天落後超過 10 天的股票（多半是已下市或長期停牌），不列入排行。冷門股偶爾幾天沒成交不會被排除。</p>
       <p class="dim">籤等規則見「🎋 求籤」頁下方。期間用上方的「看多久」。</p>
     </section>
   </main>
@@ -3694,8 +3694,7 @@ function gRenderAll() {
   const F = gSplitStale(D.rows), rows = gRankSort(F.fresh);
   el.innerHTML = `
     <h2>好籤榜｜整個股票池　<small class="dim">${MK.label} · 近 ${D.years} 年</small></h2>
-    <p>從 <b>${D.pool}</b> 檔股票池裡成功掃了 <b>${D.rows.length}</b> 檔${D.failed ? `（${D.failed} 檔沒有結果）` : ''}，於 <b>${gEsc(D.generatedAt)}</b> 算好${D.partial ? '；<b>這一份還沒掃完整個池</b>' : ''}。這是預先算好的結果，不是即時的。${F.stale.length ? `實際列入排名 <b>${rows.length}</b> 檔。` : ''}</p>
-    ${gStaleNote(F.stale, F.newest)}
+    <p>從 <b>${D.pool}</b> 檔股票池裡成功掃了 <b>${D.rows.length}</b> 檔${D.failed ? `（${D.failed} 檔沒有結果）` : ''}，於 <b>${gEsc(D.generatedAt)}</b> 算好${D.partial ? '；<b>這一份還沒掃完整個池</b>' : ''}。這是預先算好的結果，不是即時的。</p>
     ${gRankHTML(rows, 50)}`;
   el.dataset.years = D.years;
 }
